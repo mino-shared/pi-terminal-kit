@@ -11,6 +11,7 @@ import { loadConfig, type CodriveConfig } from "../src/config.ts";
 import {
   NONCE_ENV,
   SOCKET_ENV,
+  captureAndScrubIpcEnvironment,
   sendReport,
   startIpcServer,
   type IpcServer,
@@ -27,6 +28,9 @@ const PANE = /^%\d+$/;
 const WAITING_WIDGET = "pi-codrive-waiting";
 const REPORT_MESSAGE = "pi-codrive-report";
 const CHILD_ENV = Boolean(process.env[SOCKET_ENV] || process.env[NONCE_ENV]);
+const CHILD_IPC_ENV = CHILD_ENV
+  ? captureAndScrubIpcEnvironment(process.env)
+  : undefined;
 
 export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -36,11 +40,14 @@ export function buildPiArguments(
   configuredModel: string | null,
   configuredThinking: string | null,
   overrideModel?: string,
+  parentModel?: string,
+  parentThinking?: string,
 ): string[] {
   const args: string[] = [];
-  const model = overrideModel ?? configuredModel;
+  const model = overrideModel ?? configuredModel ?? parentModel;
   if (model) args.push("--model", model);
-  if (configuredThinking) args.push("--thinking", configuredThinking);
+  const thinking = configuredThinking ?? parentThinking;
+  if (thinking) args.push("--thinking", thinking);
   if (prompt) args.push(prompt);
   return args;
 }
@@ -168,7 +175,7 @@ export default function piCodrive(pi: ExtensionAPI): void {
           randomUUID(),
           process.env.TMUX_PANE,
         );
-        await sendReport(report, childConfig);
+        await sendReport(report, childConfig, CHILD_IPC_ENV);
       } catch {
         // Reporting is best-effort and must never break child Pi.
       }
@@ -281,6 +288,8 @@ export default function piCodrive(pi: ExtensionAPI): void {
     cwd: string,
     prompt?: string,
     model?: string,
+    parentModel?: string,
+    parentThinking?: string,
   ): Promise<string> => {
     if (CHILD_ENV) throw new Error("Delegation is limited to one level");
     if (!process.env.TMUX)
@@ -290,7 +299,14 @@ export default function piCodrive(pi: ExtensionAPI): void {
     if (!ipc || !config) throw new Error("IPC server is not ready");
     const launch = buildLaunch(
       config.piCommand,
-      buildPiArguments(prompt, config.model, config.thinking, model),
+      buildPiArguments(
+        prompt,
+        config.model,
+        config.thinking,
+        model,
+        parentModel,
+        parentThinking,
+      ),
     );
     const command = `tmux set-option -p remain-on-exit on; tmux set-option -p ${shellQuote(config.tmux.roleOption)} subagent; ${SOCKET_ENV}=${shellQuote(ipc.path)} ${NONCE_ENV}=${shellQuote(ipc.nonce)} exec ${launch}`;
     const args = [
@@ -320,7 +336,13 @@ export default function piCodrive(pi: ExtensionAPI): void {
       "Spawn a shared live subagent pane with an optional initial prompt",
     handler: async (args, ctx) => {
       try {
-        const pane = await spawnAndRegister(ctx.cwd, args.trim() || undefined);
+        const pane = await spawnAndRegister(
+          ctx.cwd,
+          args.trim() || undefined,
+          undefined,
+          ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+          pi.getThinkingLevel(),
+        );
         ctx.ui.notify(`Spawned shared SUBAGENT tmux pane ${pane}.`, "info");
       } catch (error) {
         ctx.ui.notify(
@@ -341,7 +363,13 @@ export default function piCodrive(pi: ExtensionAPI): void {
       model: Type.Optional(Type.String()),
     }),
     async execute(_id, params, _signal, _update, ctx) {
-      const pane = await spawnAndRegister(ctx.cwd, params.prompt, params.model);
+      const pane = await spawnAndRegister(
+        ctx.cwd,
+        params.prompt,
+        params.model,
+        ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+        pi.getThinkingLevel(),
+      );
       return {
         content: [
           {

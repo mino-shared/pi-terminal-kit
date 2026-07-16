@@ -5,7 +5,7 @@ Shared-control Pi sessions where the human and orchestrator use the exact same v
 After publication:
 
 ```sh
-pi install npm:@isaaclins/pi-codrive@0.1.0
+pi install npm:@isaaclins/pi-codrive@0.1.1
 ```
 
 Release-candidate test:
@@ -21,7 +21,7 @@ Pi 0.80.3+, Node 20 or 22, tmux, and macOS or Linux. Windows is unsupported. Out
 ## Command and tools
 
 - `/spawn <optional prompt>`: human-facing command that creates the same shared subagent pane and reports success or failure through the UI. It uses configured defaults, including model and thinking inheritance when they are `null`.
-- `spawn_agent`: programmatic equivalent of `/spawn`, with an optional explicit model override. Model and thinking inherit from Pi when configuration values are `null` because no CLI flags are emitted.
+- `spawn_agent`: programmatic equivalent of `/spawn`, with an optional explicit model override. Model and thinking inherit from the parent Pi runtime when configuration values are `null` by passing explicit CLI flags.
 - `agent_pane`: inspect capped terminal output or send literal text to a live owned pane.
 - `agent_report`: retrieve capped in-memory history after direct completion delivery.
 

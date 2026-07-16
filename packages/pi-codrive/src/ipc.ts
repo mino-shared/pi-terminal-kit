@@ -14,6 +14,23 @@ import { isSpawnReportRecord, type SpawnReportRecord } from "./state.ts";
 export const IPC_VERSION = 1;
 export const SOCKET_ENV = "PI_CODRIVE_SOCKET";
 export const NONCE_ENV = "PI_CODRIVE_NONCE";
+export const LEGACY_NOTIFY_ENV = "PI_SPAWN_NOTIFY_FILE";
+export const LEGACY_REPORT_ENV = "PI_SPAWN_AGENT_REPORT_FILE";
+export const IPC_ENV_KEYS = [
+  SOCKET_ENV,
+  NONCE_ENV,
+  LEGACY_NOTIFY_ENV,
+  LEGACY_REPORT_ENV,
+] as const;
+export function captureAndScrubIpcEnvironment(
+  environment: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const captured = Object.fromEntries(
+    IPC_ENV_KEYS.map((key) => [key, environment[key]]),
+  );
+  for (const key of IPC_ENV_KEYS) delete environment[key];
+  return captured;
+}
 export interface IpcMessage {
   version: 1;
   nonce: string;

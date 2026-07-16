@@ -14,6 +14,7 @@ import {
   socketPathLimit,
   sendReport,
   startIpcServer,
+  captureAndScrubIpcEnvironment,
 } from "../src/ipc.ts";
 import {
   createSpawnReport,
@@ -51,8 +52,11 @@ test("structured report schema v1 extracts the latest assistant and redacts erro
   assert.match(report.errorSummary!, /redacted/);
   assert.equal(extractAssistantText("plain"), "plain");
 });
-test("configuration validates and null model/thinking inherit by omitting flags", () => {
-  assert.deepEqual(buildPiArguments("work", null, null), ["work"]);
+test("null model and thinking inherit explicitly from the parent", () => {
+  assert.deepEqual(
+    buildPiArguments("work", null, null, undefined, "openai/gpt-5", "high"),
+    ["--model", "openai/gpt-5", "--thinking", "high", "work"],
+  );
   assert.deepEqual(buildPiArguments(undefined, "provider/model", "low"), [
     "--model",
     "provider/model",
@@ -69,6 +73,25 @@ test("configuration validates and null model/thinking inherit by omitting flags"
     /boolean/,
   );
 });
+test("child IPC environment is scrubbed while captured values remain usable", () => {
+  const environment = {
+    PI_CODRIVE_SOCKET: "/tmp/socket",
+    PI_CODRIVE_NONCE: "nonce",
+    PI_SPAWN_NOTIFY_FILE: "legacy",
+    PI_SPAWN_AGENT_REPORT_FILE: "legacy-report",
+  };
+  const captured = captureAndScrubIpcEnvironment(environment);
+  assert.deepEqual(captured, {
+    PI_CODRIVE_SOCKET: "/tmp/socket",
+    PI_CODRIVE_NONCE: "nonce",
+    PI_SPAWN_NOTIFY_FILE: "legacy",
+    PI_SPAWN_AGENT_REPORT_FILE: "legacy-report",
+  });
+  assert.deepEqual(environment, {});
+  assert.equal(captured.PI_CODRIVE_SOCKET, "/tmp/socket");
+  assert.equal(captured.PI_CODRIVE_NONCE, "nonce");
+});
+
 test("command construction quotes prompts and pane roles are scoped", () => {
   assert.equal(shellQuote("it's safe"), "'it'\\''s safe'");
   assert.match(buildLaunch("pi", ["hello world"]), /^'pi' 'hello world'$/);
