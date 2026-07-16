@@ -1,0 +1,37 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - name: Install system test tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fish tmux
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm pack:check
+      - name: Private tmux socket smoke test
+        run: |
+          socket="pi-terminal-kit-ci-${{ github.run_id }}-${{ strategy.job-index }}"
+          tmux -L "$socket" -f /dev/null new-session -d -s test
+          test "$(tmux -L "$socket" list-panes -t test -F '#{pane_id}' | head -1)" != ""
+          tmux -L "$socket" kill-server

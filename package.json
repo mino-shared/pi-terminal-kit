@@ -1,0 +1,20 @@
+{
+  "name": "pi-terminal-kit",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test && node --test test/*.test.mjs",
+    "lint": "pnpm format:check && pnpm typecheck",
+    "pack:check": "node test/pack.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

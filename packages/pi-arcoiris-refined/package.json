@@ -1,0 +1,33 @@
+{
+  "name": "@isaaclins/pi-arcoiris-refined",
+  "version": "1.0.0",
+  "description": "A complete 51-token Arcoiris-inspired dark theme for Pi",
+  "license": "MIT",
+  "files": [
+    "themes",
+    "README.md",
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "theme",
+    "arcoiris"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/isaaclins/pi-terminal-kit.git",
+    "directory": "packages/pi-arcoiris-refined"
+  },
+  "pi": {
+    "themes": [
+      "./themes/arcoiris-refined.json"
+    ]
+  },
+  "scripts": {
+    "typecheck": "node -e \"JSON.parse(require('fs').readFileSync('themes/arcoiris-refined.json'))\"",
+    "test": "node --test test/*.test.mjs"
+  }
+}

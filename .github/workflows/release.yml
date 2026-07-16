@@ -1,0 +1,34 @@
+name: Publish packages
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package directory name
+        required: true
+        type: choice
+        options: [pi-codrive, pi-fish-bridge, pi-arcoiris-refined]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    if: vars.NPM_TRUSTED_PUBLISHING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@^11.5.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check && pnpm typecheck && pnpm test && pnpm pack:check
+      - name: Publish with npm trusted publishing
+        working-directory: packages/${{ inputs.package }}
+        run: npm publish --provenance --access public

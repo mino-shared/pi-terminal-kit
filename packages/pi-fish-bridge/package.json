@@ -1,0 +1,40 @@
+{
+  "name": "@isaaclins/pi-fish-bridge",
+  "version": "0.1.0",
+  "description": "Safe portable Fish function shims for Pi user shell commands",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "extensions",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "fish",
+    "shell"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/isaaclins/pi-terminal-kit.git",
+    "directory": "packages/pi-fish-bridge"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/pi-fish-bridge.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.80.3"
+  }
+}
