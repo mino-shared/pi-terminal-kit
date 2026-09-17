@@ -27,6 +27,7 @@ import {
 const PANE = /^%\d+$/;
 const WAITING_WIDGET = "pi-codrive-waiting";
 const REPORT_MESSAGE = "pi-codrive-report";
+const PARENT_WINDOW_ENV = "PI_CODRIVE_PARENT_WINDOW";
 const CHILD_ENV = Boolean(process.env[SOCKET_ENV] || process.env[NONCE_ENV]);
 const CHILD_IPC_ENV = CHILD_ENV
   ? captureAndScrubIpcEnvironment(process.env)
@@ -105,10 +106,14 @@ export default function piCodrive(pi: ExtensionAPI): void {
   const live = new Set<string>();
   const waiting = new Set<string>();
   const healthTimers = new Map<string, ReturnType<typeof setInterval>>();
+  const windowIds = new Map<string, string>();
+  const paneLabels = new Map<string, string>();
   let ipc: IpcServer | undefined;
   let config: CodriveConfig | undefined;
   let parentContext: ExtensionContext | undefined;
   let catTimer: ReturnType<typeof setInterval> | undefined;
+  let orchestratorWindowId: string | undefined;
+  let spawnCounter = 0;
 
   const renderWaiting = (): void => {
     if (
@@ -214,6 +219,18 @@ export default function piCodrive(pi: ExtensionAPI): void {
     await ipc?.close();
     ipc = undefined;
     await setPaneRole("orchestrator");
+    if (process.env.TMUX_PANE) {
+      try {
+        const win = await pi.exec(
+          "tmux",
+          ["display-message", "-p", "-t", process.env.TMUX_PANE, "#{window_id}"],
+          { timeout: 5000 },
+        );
+        if (win.code === 0) orchestratorWindowId = win.stdout.trim();
+      } catch {
+        // Best-effort; /back in child panes simply won't work if this fails.
+      }
+    }
     ipc = await startIpcServer(config!, (report) => router.receive(report));
   });
 
@@ -238,6 +255,8 @@ export default function piCodrive(pi: ExtensionAPI): void {
     if (timer) clearInterval(timer);
     healthTimers.delete(pane);
     const dead = markPaneDead(pane, live, waiting, histories);
+    windowIds.delete(pane);
+    paneLabels.delete(pane);
     renderWaiting();
     return dead;
   };
@@ -308,28 +327,129 @@ export default function piCodrive(pi: ExtensionAPI): void {
         parentThinking,
       ),
     );
-    const command = `tmux set-option -p remain-on-exit on; tmux set-option -p ${shellQuote(config.tmux.roleOption)} subagent; ${SOCKET_ENV}=${shellQuote(ipc.path)} ${NONCE_ENV}=${shellQuote(ipc.nonce)} exec ${launch}`;
-    const args = [
-      "split-window",
-      config.tmux.split === "horizontal" ? "-h" : "-v",
-      "-c",
-      cwd,
-      "-P",
-      "-F",
-      "#{pane_id}",
-    ];
-    if (config.tmux.size) args.push("-l", String(config.tmux.size));
+    const parentWindowEnv = orchestratorWindowId
+      ? `${PARENT_WINDOW_ENV}=${shellQuote(orchestratorWindowId)} `
+      : "";
+    const command = `tmux set-option -p remain-on-exit on; tmux set-option -p ${shellQuote(config.tmux.roleOption)} subagent; ${SOCKET_ENV}=${shellQuote(ipc.path)} ${NONCE_ENV}=${shellQuote(ipc.nonce)} ${parentWindowEnv}exec ${launch}`;
+    const format = "#{pane_id} #{window_id}";
+    let args: string[];
+    if (config.tmux.background) {
+      const windowName = `${config.tmux.windowNamePrefix}-${++spawnCounter}`;
+      args = [
+        "new-window",
+        "-d",
+        "-c",
+        cwd,
+        "-n",
+        windowName,
+        "-P",
+        "-F",
+        format,
+      ];
+    } else {
+      args = [
+        "split-window",
+        config.tmux.split === "horizontal" ? "-h" : "-v",
+        "-c",
+        cwd,
+      ];
+      if (config.tmux.size) args.push("-l", String(config.tmux.size));
+      args.push("-P", "-F", format);
+    }
     args.push(command);
     const result = await pi.exec("tmux", args, { timeout: 10000 });
     if (result.code !== 0)
       throw new Error(
-        `tmux split-window failed: ${result.stderr || result.stdout || `exit ${result.code}`}`,
+        `tmux ${config.tmux.background ? "new-window" : "split-window"} failed: ${result.stderr || result.stdout || `exit ${result.code}`}`,
       );
-    const pane = result.stdout.trim();
+    const [pane, windowId] = result.stdout.trim().split(/\s+/);
     if (!PANE.test(pane)) throw new Error("tmux returned an invalid pane ID");
+    if (windowId) windowIds.set(pane, windowId);
+    paneLabels.set(
+      pane,
+      (prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || "(no prompt)",
+    );
     registerSpawnedPane(pane);
     return pane;
   };
+
+  pi.registerCommand("agents", {
+    description:
+      "List background subagents with a one-line preview and switch tmux focus to one",
+    handler: async (_args, ctx) => {
+      if (CHILD_ENV) {
+        ctx.ui.notify(
+          "Not available inside a subagent session. Use /back to return to the orchestrator.",
+          "warning",
+        );
+        return;
+      }
+      if (!live.size) {
+        ctx.ui.notify("No live subagents.", "info");
+        return;
+      }
+      const entries = await Promise.all(
+        [...live].map(async (pane) => {
+          const label = paneLabels.get(pane) ?? pane;
+          const status = waiting.has(pane) ? "waiting" : "running";
+          let preview = "";
+          try {
+            const cap = await pi.exec(
+              "tmux",
+              ["capture-pane", "-p", "-t", pane, "-S", "-5"],
+              { timeout: 5000 },
+            );
+            const lines = cap.stdout
+              .split("\n")
+              .map((line) => line.trimEnd())
+              .filter(Boolean);
+            preview = (lines.at(-1) ?? "").slice(0, 60);
+          } catch {
+            // Preview is best-effort; fall back to no preview text.
+          }
+          const text = `${pane}  [${status}]  ${label}${preview ? `  — ${preview}` : ""}`;
+          return { pane, text };
+        }),
+      );
+      const choice = await ctx.ui.select("Switch to subagent", entries.map((entry) => entry.text));
+      if (!choice) return;
+      const entry = entries.find((candidate) => candidate.text === choice);
+      if (!entry) return;
+      const target = windowIds.get(entry.pane) ?? entry.pane;
+      const result = await pi.exec("tmux", ["select-window", "-t", target], {
+        timeout: 5000,
+      });
+      if (result.code !== 0) {
+        ctx.ui.notify(
+          `Failed to switch to ${entry.pane}: ${result.stderr || result.stdout || `exit ${result.code}`}`,
+          "error",
+        );
+      }
+    },
+  });
+
+  pi.registerCommand("back", {
+    description: "Switch tmux focus back to the orchestrator window",
+    handler: async (_args, ctx) => {
+      const target = process.env[PARENT_WINDOW_ENV];
+      if (!target) {
+        ctx.ui.notify(
+          "No orchestrator window recorded for this session.",
+          "warning",
+        );
+        return;
+      }
+      const result = await pi.exec("tmux", ["select-window", "-t", target], {
+        timeout: 5000,
+      });
+      if (result.code !== 0) {
+        ctx.ui.notify(
+          `Failed to switch back: ${result.stderr || result.stdout || `exit ${result.code}`}`,
+          "error",
+        );
+      }
+    },
+  });
 
   pi.registerCommand("spawn", {
     description:

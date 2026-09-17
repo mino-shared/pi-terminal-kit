@@ -13,6 +13,10 @@ export interface CodriveConfig {
     size: number | null;
     captureLines: number;
     roleOption: string;
+    /** Spawn subagents as detached background windows instead of visible split panes. */
+    background: boolean;
+    /** tmux window name prefix used when background is true. */
+    windowNamePrefix: string;
   };
   notifications: {
     connectTimeoutMs: number;
@@ -31,6 +35,8 @@ export const DEFAULT_CONFIG: CodriveConfig = {
     size: null,
     captureLines: 200,
     roleOption: "@pi_codrive_role",
+    background: true,
+    windowNamePrefix: "pi-subagent",
   },
   notifications: {
     connectTimeoutMs: 2000,
@@ -94,6 +100,11 @@ export function validateConfig(raw: unknown): CodriveConfig {
     sizeValue === undefined || sizeValue === null
       ? null
       : integer(sizeValue, "tmux.size", 1, 1000);
+  const windowNamePrefix =
+    tmux.windowNamePrefix === undefined
+      ? DEFAULT_CONFIG.tmux.windowNamePrefix
+      : (optionalString(tmux.windowNamePrefix, "tmux.windowNamePrefix") ??
+        DEFAULT_CONFIG.tmux.windowNamePrefix);
   return {
     piCommand:
       optionalString(root.piCommand, "piCommand") ?? DEFAULT_CONFIG.piCommand,
@@ -107,6 +118,11 @@ export function validateConfig(raw: unknown): CodriveConfig {
           ? DEFAULT_CONFIG.tmux.captureLines
           : integer(tmux.captureLines, "tmux.captureLines", 1, 2000),
       roleOption,
+      background:
+        tmux.background === undefined
+          ? DEFAULT_CONFIG.tmux.background
+          : boolean(tmux.background, "tmux.background"),
+      windowNamePrefix,
     },
     notifications: {
       connectTimeoutMs:
