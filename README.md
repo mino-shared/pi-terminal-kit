@@ -10,6 +10,7 @@ Portable terminal integrations for [Pi](https://github.com/earendil-works/pi-mon
 | [`@isaaclins/pi-fish-bridge`](./packages/pi-fish-bridge)           | Expose selected Fish functions safely to Pi shell commands                                             | Pi 0.80.3+, Fish, Bash, macOS/Linux       |
 | [`@isaaclins/pi-arcoiris-refined`](./packages/pi-arcoiris-refined) | Complete 51-token dark theme                                                                           | Pi 0.80.3+                                |
 | [`ghostty-tmux-fish` recipe](./recipes/ghostty-tmux-fish)          | Copy-pasteable terminal integration                                                                    | Ghostty, tmux, Fish                       |
+| [`bash-pi-per-session` recipe](./recipes/bash-pi-per-session)      | Bash `pi()` wrapper: new terminal = fresh independent Pi in tmux; Ctrl+D returns to a shell            | Bash, tmux (optional)                     |
 
 ## Install after publication
 
